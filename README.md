@@ -55,36 +55,54 @@ Quality Check: Does it actually answer the question?
 
 ## Architecture
 
-```mermaid
-flowchart TD
-    S([START]) --> RQ[Route Question]
+```
+                    ╔══════════════════════════════════════════╗
+                    ║     Agentic RAG  —  LangGraph Graph       ║
+                    ╚══════════════════════════════════════════╝
 
-    RQ -->|vectorstore| RT[Retrieve]
-    RQ -->|web_search| WS[Web Search]
-
-    RT --> GD[Grade Documents]
-    WS --> GEN
-
-    GD -->|relevant docs found| GEN[Generate Answer]
-    GD -->|not enough relevant| TQ[Transform Query]
-
-    TQ -->|retry with better query| RT
-
-    GEN --> GG[Grade Generation]
-
-    GG -->|useful| E([END])
-    GG -->|hallucinated| GEN
-    GG -->|not useful| TQ
-
-    style S  fill:#1e1b4b,stroke:#7c3aed,color:#c4b5fd
-    style E  fill:#052e16,stroke:#16a34a,color:#86efac
-    style WS fill:#1c1917,stroke:#d97706,color:#fcd34d
-    style RQ fill:#0f172a,stroke:#3b82f6,color:#93c5fd
-    style RT fill:#0f172a,stroke:#3b82f6,color:#93c5fd
-    style GD fill:#0f172a,stroke:#3b82f6,color:#93c5fd
-    style GEN fill:#0f172a,stroke:#3b82f6,color:#93c5fd
-    style GG fill:#0f172a,stroke:#3b82f6,color:#93c5fd
-    style TQ fill:#1c0a00,stroke:#ea580c,color:#fed7aa
+                                    START
+                                      │
+                          ┌───────────▼───────────┐
+                          │     Route Question     │  ← LLM decides datasource
+                          └───────┬───────────┬───┘
+                       vectorstore│           │web_search
+                                  │           │
+              ┌───────────────────▼──┐   ┌────▼──────────────┐
+              │       Retrieve        │   │    Web Search      │
+              │  ① Dense (ChromaDB)   │   │  (Tavily API)      │
+              │  ② Sparse (BM25)      │   └────────┬──────────┘
+              │  ③ RRF Fusion         │            │
+              │  ④ Cross-Encoder      │            │
+              └───────────┬───────────┘            │
+                          │                        │
+              ┌───────────▼───────────┐            │
+              │    Grade Documents    │            │
+              │  (per-doc LLM score)  │            │
+              └──────┬────────┬───────┘            │
+                     │        │                    │
+              relevant?    not enough              │
+                     │        │                    │
+                     │   ┌────▼──────────────┐     │
+                     │   │  Transform Query   │     │
+                     │   │  (LLM rewrite)     │     │
+                     │   └────────┬──────────┘     │
+                     │            │ (loops → Retrieve)
+                     │            │
+              ┌──────▼────────────┴────────────────┘
+              │              Generate               │
+              │   (context-grounded answer)         │
+              └──────────────┬──────────────────────┘
+                             │
+              ┌──────────────▼──────────────────────┐
+              │         Grade Generation             │
+              │  ① Hallucination check               │
+              │  ② Answer quality check              │
+              └────┬──────────┬──────────┬───────────┘
+                   │          │          │
+               useful   not supported  not useful
+                   │          │          │
+                  END      Generate   Transform Query
+                           (retry)    (rewrite + retrieve)
 ```
 
 ---
