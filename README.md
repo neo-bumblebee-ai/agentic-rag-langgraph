@@ -57,24 +57,28 @@ Quality Check: Does it actually answer the question?
 
 ```mermaid
 flowchart TD
-    A([START]) --> B[Route Question\n─────────────\nLLM decides datasource]
+    S([START]) --> RQ[Route Question]
 
-    B -->|vectorstore| C[Retrieve\n─────────────\n① Dense Search - ChromaDB\n② Sparse Search - BM25\n③ RRF Fusion\n④ Cross-Encoder Rerank]
-    B -->|web_search| D[Web Search\n─────────────\nTavily API\nOptional - needs API key]
+    RQ -->|vectorstore| RT["Retrieve<br/>① Dense · ChromaDB<br/>② Sparse · BM25<br/>③ RRF Fusion<br/>④ Cross-Encoder Rerank"]
+    RQ -->|web_search| WS["Web Search<br/>Tavily · Optional"]
 
-    C --> E[Grade Documents\n─────────────\nLLM scores each chunk\nFilters irrelevant ones]
-    D --> G
+    RT --> GD["Grade Documents<br/>LLM scores each chunk<br/>Irrelevant ones discarded"]
+    WS --> GEN
 
-    E -->|enough relevant docs| G[Generate\n─────────────\nContext-grounded answer\nusing vetted chunks only]
-    E -->|not enough relevant| F[Transform Query\n─────────────\nLLM rewrites question\nfor better retrieval]
+    GD -->|relevant docs found| GEN["Generate Answer<br/>Grounded in vetted chunks"]
+    GD -->|not enough relevant| TQ["Transform Query<br/>LLM rewrites question"]
 
-    F -->|retry| C
+    TQ -->|retry| RT
 
-    G --> H[Grade Generation\n─────────────\n① Hallucination check\n② Answer quality check]
+    GEN --> GG["Grade Generation<br/>① Hallucination check<br/>② Answer quality check"]
 
-    H -->|useful| I([END ✓])
-    H -->|not supported - hallucination| G
-    H -->|not useful| F
+    GG -->|useful ✓| E([END ✓])
+    GG -->|hallucinated| GEN
+    GG -->|not useful| TQ
+
+    style S fill:#1e1b4b,stroke:#7c3aed,color:#c4b5fd
+    style E fill:#052e16,stroke:#16a34a,color:#86efac
+    style WS fill:#1c1917,stroke:#d97706,color:#fcd34d
 ```
 
 ---
