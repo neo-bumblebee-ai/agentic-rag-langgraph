@@ -59,26 +59,32 @@ Quality Check: Does it actually answer the question?
 flowchart TD
     S([START]) --> RQ[Route Question]
 
-    RQ -->|vectorstore| RT["Retrieve<br/>① Dense · ChromaDB<br/>② Sparse · BM25<br/>③ RRF Fusion<br/>④ Cross-Encoder Rerank"]
-    RQ -->|web_search| WS["Web Search<br/>Tavily · Optional"]
+    RQ -->|vectorstore| RT[Retrieve]
+    RQ -->|web_search| WS[Web Search]
 
-    RT --> GD["Grade Documents<br/>LLM scores each chunk<br/>Irrelevant ones discarded"]
+    RT --> GD[Grade Documents]
     WS --> GEN
 
-    GD -->|relevant docs found| GEN["Generate Answer<br/>Grounded in vetted chunks"]
-    GD -->|not enough relevant| TQ["Transform Query<br/>LLM rewrites question"]
+    GD -->|relevant docs found| GEN[Generate Answer]
+    GD -->|not enough relevant| TQ[Transform Query]
 
-    TQ -->|retry| RT
+    TQ -->|retry with better query| RT
 
-    GEN --> GG["Grade Generation<br/>① Hallucination check<br/>② Answer quality check"]
+    GEN --> GG[Grade Generation]
 
-    GG -->|useful ✓| E([END ✓])
+    GG -->|useful| E([END])
     GG -->|hallucinated| GEN
     GG -->|not useful| TQ
 
-    style S fill:#1e1b4b,stroke:#7c3aed,color:#c4b5fd
-    style E fill:#052e16,stroke:#16a34a,color:#86efac
+    style S  fill:#1e1b4b,stroke:#7c3aed,color:#c4b5fd
+    style E  fill:#052e16,stroke:#16a34a,color:#86efac
     style WS fill:#1c1917,stroke:#d97706,color:#fcd34d
+    style RQ fill:#0f172a,stroke:#3b82f6,color:#93c5fd
+    style RT fill:#0f172a,stroke:#3b82f6,color:#93c5fd
+    style GD fill:#0f172a,stroke:#3b82f6,color:#93c5fd
+    style GEN fill:#0f172a,stroke:#3b82f6,color:#93c5fd
+    style GG fill:#0f172a,stroke:#3b82f6,color:#93c5fd
+    style TQ fill:#1c0a00,stroke:#ea580c,color:#fed7aa
 ```
 
 ---
