@@ -13,108 +13,167 @@
 
 ---
 
-Traditional RAG is a straight line: retrieve → generate. Real-world questions are rarely that simple.
+## What Is This?
 
-This project upgrades the pipeline into a **self-correcting, multi-agent system** built with [LangGraph](https://langchain-ai.github.io/langgraph/) — one that can intelligently route queries, grade its own retrieved context, detect hallucinations, rewrite failing queries, and loop until the answer is trustworthy.
+Traditional RAG (Retrieval-Augmented Generation) is a straight line: **retrieve → generate**. You ask a question, the system grabs some documents, and the AI answers. Simple — but it breaks down when:
 
-Every component is explicit and swappable. No black-box wrappers.
+- The retrieved documents aren't actually relevant
+- The AI makes up an answer not supported by the documents
+- The search query itself is poorly worded
+
+This project fixes all three by turning the pipeline into a **self-correcting, multi-agent loop** using [LangGraph](https://langchain-ai.github.io/langgraph/). Instead of answering once and hoping for the best, the system:
+
+1. **Checks** if retrieved documents are actually relevant (and discards ones that aren't)
+2. **Detects** when the AI's answer isn't grounded in facts
+3. **Rewrites** the question and tries again if retrieval fails
+4. **Remembers** your previous questions in the same session
+
+Everything runs **100% on your local machine**. No cloud services, no API keys required to get started.
 
 ---
 
-## Why This Matters
+## How It Works — Plain English
 
-| Problem with Traditional RAG | How This Fixes It |
-|---|---|
-| Retrieves chunks regardless of relevance | **Document Grader Agent** filters irrelevant docs before generation |
-| Answers even when context is wrong or empty | **Hallucination Checker** triggers regeneration if answer isn't grounded |
-| Same failing query is retried unchanged | **Query Rewriter** improves the question semantically for better recall |
-| Only dense (cosine) retrieval | **Hybrid Search**: BM25 sparse + dense vectors fused via Reciprocal Rank Fusion |
-| Single-pass retrieval, no second chances | **Cross-Encoder Reranker** rescores candidates by reading query+doc together |
-| Stateless — no memory between turns | **Conversation Memory** with automatic LLM-driven summarisation |
+```
+You ask a question
+       ↓
+Router decides: search my documents OR search the web?
+       ↓
+Retrieval runs 3 search methods simultaneously and merges results
+       ↓
+Document Grader checks each result — throws out irrelevant ones
+       ↓
+AI writes an answer using only the vetted documents
+       ↓
+Fact Checker: Is the answer actually supported by the documents?
+Quality Check: Does it actually answer the question?
+       ↓ both pass → you get the answer
+       ↓ either fails → query is rewritten → loop back
+```
 
 ---
 
 ## Architecture
 
-```
-                    ╔══════════════════════════════════════════╗
-                    ║     Agentic RAG  —  LangGraph Graph       ║
-                    ╚══════════════════════════════════════════╝
+```mermaid
+flowchart TD
+    A([START]) --> B[Route Question\n─────────────\nLLM decides datasource]
 
-                                    START
-                                      │
-                          ┌───────────▼───────────┐
-                          │     Route Question     │  ← LLM decides datasource
-                          └───────┬───────────┬───┘
-                       vectorstore│           │web_search
-                                  │           │
-              ┌───────────────────▼──┐   ┌────▼──────────────┐
-              │       Retrieve        │   │    Web Search      │
-              │  ① Dense (ChromaDB)   │   │  (Tavily API)      │
-              │  ② Sparse (BM25)      │   └────────┬──────────┘
-              │  ③ RRF Fusion         │            │
-              │  ④ Cross-Encoder      │            │
-              └───────────┬───────────┘            │
-                          │                        │
-              ┌───────────▼───────────┐            │
-              │    Grade Documents    │            │
-              │  (per-doc LLM score)  │            │
-              └──────┬────────┬───────┘            │
-                     │        │                    │
-              relevant?    not enough              │
-                     │        │                    │
-                     │   ┌────▼──────────────┐     │
-                     │   │  Transform Query   │     │
-                     │   │  (LLM rewrite)     │     │
-                     │   └────────┬──────────┘     │
-                     │            │ (loops → Retrieve)
-                     │            │
-              ┌──────▼────────────┴────────────────┘
-              │              Generate               │
-              │   (context-grounded answer)         │
-              └──────────────┬──────────────────────┘
-                             │
-              ┌──────────────▼──────────────────────┐
-              │         Grade Generation             │
-              │  ① Hallucination check               │
-              │  ② Answer quality check              │
-              └────┬──────────┬──────────┬───────────┘
-                   │          │          │
-               useful   not supported  not useful
-                   │          │          │
-                  END      Generate   Transform Query
-                           (retry)    (rewrite + retrieve)
+    B -->|vectorstore| C[Retrieve\n─────────────\n① Dense Search - ChromaDB\n② Sparse Search - BM25\n③ RRF Fusion\n④ Cross-Encoder Rerank]
+    B -->|web_search| D[Web Search\n─────────────\nTavily API\nOptional - needs API key]
+
+    C --> E[Grade Documents\n─────────────\nLLM scores each chunk\nFilters irrelevant ones]
+    D --> G
+
+    E -->|enough relevant docs| G[Generate\n─────────────\nContext-grounded answer\nusing vetted chunks only]
+    E -->|not enough relevant| F[Transform Query\n─────────────\nLLM rewrites question\nfor better retrieval]
+
+    F -->|retry| C
+
+    G --> H[Grade Generation\n─────────────\n① Hallucination check\n② Answer quality check]
+
+    H -->|useful| I([END ✓])
+    H -->|not supported - hallucination| G
+    H -->|not useful| F
 ```
 
 ---
 
-## Retrieval Deep Dive
+## Why This Beats Traditional RAG
 
-The retriever runs three stages before a single token is generated:
-
-```
-Query
-  │
-  ├─① Dense Retrieval ──────────────────────────────────────────────────────┐
-  │   ChromaDB + sentence-transformers (all-MiniLM-L6-v2)                   │
-  │   Returns top-10 by cosine similarity                                   │
-  │                                                                          │
-  ├─② Sparse Retrieval (BM25) ──────────────────────────────────────────────┤
-  │   Okapi BM25 over all ingested chunks                                   │
-  │   Returns top-10 by term frequency score                                │
-  │                                                                          ▼
-  └─③ Reciprocal Rank Fusion ──────────► ④ Cross-Encoder Reranking ──► Top-5
-      Merges both ranked lists               (query, doc) pair scoring
-      Score = Σ 1/(k + rank_i)              cross-encoder/ms-marco-MiniLM-L-6-v2
-```
-
-**Why hybrid?** Dense retrieval excels at semantic similarity. BM25 excels at exact keyword matches. Neither alone is optimal — RRF combines both without requiring manual weight tuning.
-
-**Why cross-encoder reranking?** Bi-encoders (cosine similarity) encode query and document independently. A cross-encoder reads them *together*, capturing fine-grained relevance signals. Much more accurate, used as a final pass over the fused candidates.
+| Problem | Traditional RAG | This System |
+|---|---|---|
+| Irrelevant documents | ❌ All top-K passed to LLM | ✅ Document Grader filters each one |
+| Hallucinations | ❌ No protection | ✅ Fact-checked before delivery |
+| Bad query → bad results | ❌ Returns empty / wrong answer | ✅ Query Rewriter retries automatically |
+| Keyword vs semantic mismatch | ❌ Dense cosine only | ✅ BM25 + Dense + RRF + Reranking |
+| No memory between questions | ❌ Stateless | ✅ Rolling conversation memory |
 
 ---
 
-## Demo
+## Prerequisites
+
+Before you start, make sure you have these installed:
+
+| Tool | Purpose | Install |
+|---|---|---|
+| **Python 3.11+** | Run the code | [python.org](https://www.python.org/downloads/) |
+| **uv** | Package manager (fast) | `curl -LsSf https://astral.sh/uv/install.sh \| sh` |
+| **Ollama** | Run AI models locally | [ollama.com/download](https://ollama.com/download) |
+| **Git** | Clone the repo | [git-scm.com](https://git-scm.com) |
+
+> **Don't have uv?** You can use `pip` instead — every step has a `pip` alternative.
+
+---
+
+## Quick Start
+
+### Step 1 — Clone the repository
+
+```bash
+git clone https://github.com/neo-bumblebee-ai/agentic-rag-langgraph.git
+cd agentic-rag-langgraph
+```
+
+### Step 2 — Install dependencies
+
+```bash
+# With uv (recommended — faster)
+uv sync
+
+# With pip (alternative)
+pip install -r requirements.txt
+```
+
+### Step 3 — Download an AI model
+
+```bash
+# Start Ollama first (if not already running)
+ollama serve
+
+# Then pull a model (in a new terminal)
+ollama pull llama3.2        # ~2 GB  — best quality, recommended
+ollama pull llama3.2:1b     # ~800 MB — faster, good for low-end machines
+ollama pull mistral         # ~4 GB  — alternative option
+```
+
+> **Which model should I pick?** Start with `llama3.2`. If your machine is slow, use `llama3.2:1b`.
+
+### Step 4 — Add your documents
+
+Drop any PDF or text files into the `data/` folder:
+
+```
+data/
+├── pdf_files/      ← put your PDFs here (user manuals, reports, articles, etc.)
+└── text_files/     ← put your .txt files here
+```
+
+> **No documents yet?** That's fine — you can add them later. The system will just tell you the folder is empty.
+
+### Step 5 — Run
+
+```bash
+# With uv
+uv run python main.py
+
+# With pip / regular Python
+python main.py
+```
+
+**What happens on first run:**
+1. All documents in `data/` are loaded and split into chunks
+2. Each chunk is embedded and stored in ChromaDB (takes a few minutes)
+3. BM25 index is built in memory
+4. The agent graph is compiled
+5. You get a question prompt
+
+**What happens on later runs:**
+- Steps 1–3 are skipped — everything is loaded from disk instantly
+
+---
+
+## Example Session
 
 ```
 === Agentic RAG Pipeline — LangGraph Multi-Agent System ===
@@ -122,51 +181,138 @@ Query
 Vector store ready — 847 chunks loaded.
 BM25 index rebuilt from existing documents.
 
-Compiling agent graph …
-  Model      : llama3.2
-  Embeddings : all-MiniLM-L6-v2
-  Reranker   : cross-encoder/ms-marco-MiniLM-L-6-v2
-  Max loops  : 3
+Model      : llama3.2
+Embeddings : all-MiniLM-L6-v2
+Reranker   : cross-encoder/ms-marco-MiniLM-L-6-v2
 
-Question: What are the steps to reset the HVAC unit after a power outage?
+Type a question, 'clear' to reset memory, or 'quit' to exit.
 
---- EDGE: ROUTE QUESTION ---
+Question: What are the maintenance steps after a power outage?
+
   → Routing to: vectorstore
-
---- NODE: RETRIEVE ---
   [Dense]    10 chunks retrieved
-  [BM25]      8 chunks retrieved (5 unique)
-  [RRF]      14 candidates fused
+  [BM25]      8 chunks retrieved
   [Reranker] Reranked to top 5
-
---- NODE: GRADE DOCUMENTS ---
-  doc_0 → yes ✓
-  doc_1 → yes ✓
-  doc_2 → no  ✗
-  doc_3 → yes ✓
-  doc_4 → yes ✓
-
---- EDGE: DECIDE TO GENERATE ---
-  → 4 relevant docs found — generating answer
-
---- NODE: GENERATE ---
-
---- EDGE: GRADE GENERATION ---
+  doc_0 → relevant ✓
+  doc_1 → relevant ✓
+  doc_2 → not relevant ✗
+  doc_3 → relevant ✓
   → Hallucination check: grounded ✓
   → Answer quality: useful ✓
 
-──────────────────────────────────────────────────────────
 Answer:
-After a power outage, reset the HVAC unit by: 1) waiting 5 minutes for
-pressures to equalise, 2) pressing the "Fault Reset" button on the control
-panel, 3) verifying all dampers have returned to their home positions, and
-4) monitoring the system for 15 minutes before leaving unattended.
-──────────────────────────────────────────────────────────
+After a power outage: 1) Wait 5 minutes for pressures to equalise,
+2) Press the Fault Reset button on the control panel, 3) Verify all
+dampers returned to home positions, 4) Monitor for 15 minutes.
 ```
 
 ---
 
-## Stack
+## Configuration
+
+All settings are in one file — `src/config.py`. You don't need to touch this to get started, but here's what you can change:
+
+| Setting | Default | What It Does |
+|---|---|---|
+| `ollama_model` | `llama3.2` | Which AI model to use — any model you've pulled with Ollama |
+| `embedding_model` | `all-MiniLM-L6-v2` | How documents are converted to searchable vectors |
+| `chunk_size` | `1000` | How many characters per document chunk |
+| `chunk_overlap` | `200` | Overlap between chunks so context isn't lost at boundaries |
+| `top_k_retrieval` | `10` | How many candidates each retriever fetches |
+| `top_k_final` | `5` | How many chunks the AI actually sees after reranking |
+| `max_iterations` | `3` | How many self-correction attempts before giving up |
+
+---
+
+## Optional Features
+
+### Web Search (Tavily)
+
+By default, the system only searches your local documents. To also search the live web:
+
+1. Get a free API key at [tavily.com](https://tavily.com)
+2. Copy the example env file: `cp .env.example .env`
+3. Add your key: `TAVILY_API_KEY=tvly-your-key-here`
+
+> **Important:** The AI model (Ollama) always runs locally — even with Tavily enabled. Tavily only fetches raw web text. Your prompts and answers never leave your machine.
+
+### LangSmith Tracing
+
+Visualise the full agent graph execution step-by-step:
+
+1. Create a free account at [smith.langchain.com](https://smith.langchain.com)
+2. Add to `.env`:
+```
+LANGCHAIN_TRACING_V2=true
+LANGCHAIN_API_KEY=ls__your-key-here
+LANGCHAIN_PROJECT=agentic-rag-langgraph
+```
+
+---
+
+## Troubleshooting
+
+**`Failed to connect to Ollama`**
+Ollama isn't running. Start it:
+```bash
+ollama serve
+```
+
+**`No documents found`**
+The `data/pdf_files/` and `data/text_files/` folders are empty. Add at least one `.pdf` or `.txt` file.
+
+**`Collection has 0 docs` on restart**
+The vector store was deleted or path changed. Delete `data/vector_store/` and re-run to rebuild.
+
+**Slow responses**
+- Switch to a smaller model: `ollama pull llama3.2:1b` then set `ollama_model = "llama3.2:1b"` in `src/config.py`
+- Reduce `top_k_retrieval` from 10 to 5
+
+**Poor answer quality**
+- Reduce `chunk_size` to `500` for more granular retrieval
+- Make sure your documents are actually relevant to what you're asking
+
+**`ModuleNotFoundError`**
+Dependencies aren't installed. Run `uv sync` or `pip install -r requirements.txt`.
+
+---
+
+## Project Structure
+
+```
+agentic-rag-langgraph/
+│
+├── main.py                      # ← START HERE — run this file
+│
+├── src/
+│   ├── config.py                # All settings in one place
+│   ├── graph/
+│   │   ├── state.py             # Shared data structure between agents
+│   │   ├── nodes.py             # What each agent does
+│   │   └── workflow.py          # How agents connect to each other
+│   ├── retrieval/
+│   │   ├── vector_store.py      # Semantic (meaning-based) search
+│   │   ├── bm25_retriever.py    # Keyword-based search
+│   │   ├── hybrid_search.py     # Combines both + reranking
+│   │   └── reranker.py          # Final quality scoring
+│   ├── memory/
+│   │   └── conversation.py      # Remembers your previous questions
+│   └── ingestion/
+│       └── loader.py            # Reads your PDFs and text files
+│
+├── data/
+│   ├── pdf_files/               # ← put your PDFs here
+│   ├── text_files/              # ← put your .txt files here
+│   └── vector_store/            # Auto-generated — do not edit
+│
+├── .env.example                 # Template for optional API keys
+├── pyproject.toml               # Project dependencies
+└── requirements.txt             # pip-compatible dependency list
+```
+
+---
+
+## Tech Stack
 
 | Component | Tool | Notes |
 |---|---|---|
@@ -176,126 +322,10 @@ panel, 3) verifying all dampers have returned to their home positions, and
 | Sparse retrieval | **BM25** (`rank-bm25`) | Okapi BM25 over all document chunks |
 | Fusion | **Reciprocal Rank Fusion** | Combines dense + sparse rankings |
 | Reranking | **CrossEncoder** | `cross-encoder/ms-marco-MiniLM-L-6-v2` |
-| Web search | **Tavily** | Optional — requires `TAVILY_API_KEY`. Without it, web search is silently skipped and the system uses local docs only. The LLM always runs locally regardless. |
-| Tracing | **LangSmith** | Optional — requires `LANGCHAIN_API_KEY` |
+| Web search | **Tavily** | Optional — needs `TAVILY_API_KEY`. LLM always stays local. |
+| Tracing | **LangSmith** | Optional — needs `LANGCHAIN_API_KEY` |
 | Memory | Custom LLM summarisation | Compresses history when it grows too long |
 | Package manager | `uv` | Fast, modern Python package manager |
-
----
-
-## Quick Start
-
-### 1. Clone
-
-```bash
-git clone https://github.com/neo-bumblebee-ai/agentic-rag-langgraph.git
-cd agentic-rag-langgraph
-```
-
-### 2. Install
-
-```bash
-uv sync
-# or: pip install -r requirements.txt
-```
-
-### 3. Pull an Ollama model
-
-```bash
-ollama pull llama3.2       # ~2 GB — recommended
-ollama pull llama3.2:1b    # ~800 MB — faster on low-end hardware
-ollama pull mistral        # alternative
-```
-
-### 4. Add your documents
-
-```
-data/
-├── pdf_files/      ← drop any PDFs here
-└── text_files/     ← or plain .txt files
-```
-
-### 5. Configure (optional)
-
-```bash
-cp .env.example .env
-# Add TAVILY_API_KEY for web search
-# Add LANGCHAIN_API_KEY for LangSmith tracing
-```
-
-### 6. Run
-
-```bash
-uv run python main.py
-```
-
-First run ingests and embeds all documents. Subsequent runs load from disk — no re-embedding.
-
----
-
-## Configuration
-
-All settings live in `src/config.py`:
-
-```python
-ollama_model     = "llama3.2"                            # any Ollama model
-embedding_model  = "all-MiniLM-L6-v2"                   # sentence-transformers model
-reranker_model   = "cross-encoder/ms-marco-MiniLM-L-6-v2"
-chunk_size       = 1000
-chunk_overlap    = 200
-top_k_retrieval  = 10    # candidates fetched by each retriever
-top_k_final      = 5     # chunks passed to LLM after reranking
-max_iterations   = 3     # self-correction loop guard
-```
-
----
-
-## Project Structure
-
-```
-agentic-rag-langgraph/
-│
-├── main.py                          # Entry point — run this
-│
-├── src/
-│   ├── config.py                    # All configuration in one place
-│   │
-│   ├── graph/
-│   │   ├── state.py                 # LangGraph AgentState TypedDict
-│   │   ├── nodes.py                 # All node + edge functions
-│   │   └── workflow.py              # Graph construction + compilation
-│   │
-│   ├── retrieval/
-│   │   ├── vector_store.py          # ChromaDB persistent vector store
-│   │   ├── bm25_retriever.py        # BM25 sparse retrieval
-│   │   ├── hybrid_search.py         # RRF fusion + reranking orchestrator
-│   │   └── reranker.py              # Cross-encoder reranking
-│   │
-│   ├── memory/
-│   │   └── conversation.py          # Rolling history + LLM summarisation
-│   │
-│   └── ingestion/
-│       └── loader.py                # PDF + text loading and chunking
-│
-├── data/
-│   ├── pdf_files/                   # Your PDFs (not committed)
-│   ├── text_files/                  # Your .txt files (not committed)
-│   └── vector_store/                # ChromaDB persisted here (not committed)
-│
-├── notebooks/
-│   ├── 01_graph_walkthrough.ipynb   # Step-by-step graph visualisation
-│   └── 02_hybrid_search_demo.ipynb  # BM25 vs dense vs hybrid comparison
-│
-├── tests/
-│   ├── test_retrieval.py
-│   ├── test_grader.py
-│   └── test_workflow.py
-│
-├── .env.example
-├── pyproject.toml
-├── requirements.txt
-└── CONTRIBUTING.md
-```
 
 ---
 
@@ -307,9 +337,9 @@ agentic-rag-langgraph/
 - [x] Hallucination detection + self-correction
 - [x] Query rewriting
 - [x] Conversation memory with summarisation
-- [ ] LangSmith tracing dashboard integration
 - [ ] Streamlit web UI
 - [ ] RAGAS evaluation suite
+- [ ] LangSmith tracing dashboard integration
 - [ ] Multi-document source attribution
 
 ---
