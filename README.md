@@ -176,7 +176,7 @@ panel, 3) verifying all dampers have returned to their home positions, and
 | Sparse retrieval | **BM25** (`rank-bm25`) | Okapi BM25 over all document chunks |
 | Fusion | **Reciprocal Rank Fusion** | Combines dense + sparse rankings |
 | Reranking | **CrossEncoder** | `cross-encoder/ms-marco-MiniLM-L-6-v2` |
-| Web search | **Tavily** | Optional — requires `TAVILY_API_KEY` |
+| Web search | **Tavily** | Optional — requires `TAVILY_API_KEY`. Without it, web search is silently skipped and the system uses local docs only. The LLM always runs locally regardless. |
 | Tracing | **LangSmith** | Optional — requires `LANGCHAIN_API_KEY` |
 | Memory | Custom LLM summarisation | Compresses history when it grows too long |
 | Package manager | `uv` | Fast, modern Python package manager |
@@ -326,6 +326,15 @@ This is **Part 3** of a 6-month build-in-public AI engineering series:
 | April | LLMOps Evaluation Platform | 🔜 Coming |
 | May | LLM Fine-Tuning + NVIDIA NIM | 🔜 Coming |
 | June | Enterprise AI Platform (Capstone) | 🔜 Coming |
+
+---
+
+## Author
+
+**Jignesh Patel** — [@neo-bumblebee-ai](https://github.com/neo-bumblebee-ai)
+Senior Data Architect & Engineering Lead · 17+ years building large-scale data platforms.
+
+See [CONTRIBUTORS.md](CONTRIBUTORS.md) for the full contributor list.
 
 ---
 

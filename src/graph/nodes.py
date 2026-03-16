@@ -189,10 +189,36 @@ def transform_query(state: AgentState) -> dict:
 
 
 def web_search(state: AgentState) -> dict:
-    """Fetch web results via Tavily and append them to the document list."""
+    """
+    Fetch live web results via Tavily and append them to the document list.
+
+    IMPORTANT — web search is OPTIONAL and requires a Tavily API key:
+        1. Get a free key at https://tavily.com
+        2. Add TAVILY_API_KEY=<your-key> to your .env file
+
+    WITHOUT a key:
+        - The import or API call will raise an exception.
+        - The except block catches it silently.
+        - The graph continues with whatever documents were already retrieved.
+        - No crash, no data loss — web search is simply skipped.
+
+    WITH a key:
+        - Tavily fetches 3 live web results for the query.
+        - Results are appended to the existing document list.
+        - The LLM then has both local docs AND web context to draw from.
+
+    NOTE: The LLM (Ollama) always runs locally. Tavily is only a data-fetching
+    plugin — like a library card. The AI brain never touches the internet.
+    """
     print("\n--- NODE: WEB SEARCH ---")
     question  = state["question"]
     documents = list(state.get("documents", []))
+
+    tavily_key = config.tavily_api_key
+    if not tavily_key:
+        print("  Web search skipped — TAVILY_API_KEY not set in .env")
+        print("  Get a free key at https://tavily.com and add it to .env to enable.")
+        return {"documents": documents}
 
     try:
         from langchain_community.tools.tavily_search import TavilySearchResults
@@ -202,7 +228,7 @@ def web_search(state: AgentState) -> dict:
         documents.append(web_doc)
         print(f"  Web search returned {len(results)} results")
     except Exception as exc:
-        print(f"  Web search unavailable ({exc}). Proceeding with existing docs.")
+        print(f"  Web search failed ({exc}). Proceeding with existing docs.")
 
     return {"documents": documents}
 
