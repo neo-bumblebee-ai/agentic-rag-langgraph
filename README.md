@@ -57,19 +57,19 @@ Quality Check: Does it actually answer the question?
 
 ```
                     ╔══════════════════════════════════════════╗
-                    ║     Agentic RAG  —  LangGraph Graph       ║
+                    ║     Agentic RAG  —  LangGraph Graph      ║
                     ╚══════════════════════════════════════════╝
 
                                     START
                                       │
                           ┌───────────▼───────────┐
-                          │     Route Question     │  ← LLM decides datasource
+                          │     Route Question    │  ← LLM decides datasource
                           └───────┬───────────┬───┘
                        vectorstore│           │web_search
                                   │           │
-              ┌───────────────────▼──┐   ┌────▼──────────────┐
-              │       Retrieve        │   │    Web Search      │
-              │  ① Dense (ChromaDB)   │   │  (Tavily API)      │
+              ┌───────────────────▼── ┐   ┌────▼──────────────┐
+              │       Retrieve        │   │    Web Search     │
+              │  ① Dense (ChromaDB)   │   │  (Tavily API)     │
               │  ② Sparse (BM25)      │   └────────┬──────────┘
               │  ③ RRF Fusion         │            │
               │  ④ Cross-Encoder      │            │
@@ -83,21 +83,21 @@ Quality Check: Does it actually answer the question?
               relevant?    not enough              │
                      │        │                    │
                      │   ┌────▼──────────────┐     │
-                     │   │  Transform Query   │     │
-                     │   │  (LLM rewrite)     │     │
+                     │   │  Transform Query  │     │
+                     │   │  (LLM rewrite)    │     │
                      │   └────────┬──────────┘     │
                      │            │ (loops → Retrieve)
-                     │            │
+                     │            │                |
               ┌──────▼────────────┴────────────────┘
-              │              Generate               │
-              │   (context-grounded answer)         │
-              └──────────────┬──────────────────────┘
+              │              Generate              │
+              │   (context-grounded answer)        │
+              └──────────────┬─────────────────────┘
                              │
               ┌──────────────▼──────────────────────┐
-              │         Grade Generation             │
-              │  ① Hallucination check               │
-              │  ② Answer quality check              │
-              └────┬──────────┬──────────┬───────────┘
+              │         Grade Generation            │
+              │  ① Hallucination check              │
+              │  ② Answer quality check             │
+              └────┬──────────┬──────────┬──────────┘
                    │          │          │
                useful   not supported  not useful
                    │          │          │
