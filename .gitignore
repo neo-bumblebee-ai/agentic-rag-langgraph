@@ -17,8 +17,11 @@ venv/
 data/vector_store/
 data/pdf_files/
 data/text_files/
-# Track sample file so new users can run immediately after cloning
+# Track sample files so new users can run immediately after cloning
 !data/text_files/sample_rag_overview.txt
+!data/pdf_files/breville_barista_express_BES870.pdf
+!data/pdf_files/breville_barista_express_impress_BES876.pdf
+!data/pdf_files/breville_oracle_BES980.pdf
 
 # Jupyter
 .ipynb_checkpoints/
