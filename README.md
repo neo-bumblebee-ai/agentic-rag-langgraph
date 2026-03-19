@@ -256,7 +256,14 @@ All settings are in one file — `src/config.py`. You don't need to touch this t
 
 ### Web Search (Tavily)
 
-By default, the system only searches your local documents. To also search the live web:
+Web search runs in **placeholder mode** when no API key is configured. The full agent graph still executes end-to-end — instead of live results, a placeholder document is injected so you can see the complete web search flow working locally without signing up for anything.
+
+| Mode | Behaviour |
+|---|---|
+| **No API key** (default) | Placeholder mode — full graph runs, local docs only, no crash |
+| **With API key** | Live web results fetched and appended alongside local docs |
+
+To enable live web results:
 
 1. Get a free API key at [tavily.com](https://tavily.com)
 2. Copy the example env file: `cp .env.example .env`

@@ -216,10 +216,27 @@ def web_search(state: AgentState) -> dict:
 
     tavily_key = config.tavily_api_key
     if not tavily_key:
-        print("  Web search skipped — TAVILY_API_KEY not set in .env")
-        print("  Get a free key at https://tavily.com and add it to .env to enable.")
+        # ── Placeholder mode ──────────────────────────────────────────────────
+        # No API key configured. Instead of silently doing nothing, we inject a
+        # placeholder document so the full agent graph still runs end-to-end and
+        # the user can see the web_search → generate flow working locally.
+        print("  Web search running in PLACEHOLDER mode (no TAVILY_API_KEY found)")
+        print("  To enable live web search: add TAVILY_API_KEY to your .env file")
+        print("  Get a free key at https://tavily.com")
+
+        placeholder = (
+            f"[WEB SEARCH PLACEHOLDER]\n"
+            f"Query: {question}\n\n"
+            f"Web search is not yet configured for this system. "
+            f"To enable live web results, add a TAVILY_API_KEY to your .env file "
+            f"(free tier available at https://tavily.com).\n\n"
+            f"This placeholder is standing in for real web results. "
+            f"The answer below is generated from locally available documents only."
+        )
+        documents.append(placeholder)
         return {"documents": documents}
 
+    # ── Live web search via Tavily ─────────────────────────────────────────────
     try:
         from langchain_community.tools.tavily_search import TavilySearchResults
         tool    = TavilySearchResults(k=3)
