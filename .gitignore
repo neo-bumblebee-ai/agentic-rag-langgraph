@@ -17,6 +17,8 @@ venv/
 data/vector_store/
 data/pdf_files/
 data/text_files/
+# Track sample file so new users can run immediately after cloning
+!data/text_files/sample_rag_overview.txt
 
 # Jupyter
 .ipynb_checkpoints/

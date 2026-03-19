@@ -1,0 +1,99 @@
+Retrieval-Augmented Generation (RAG): A Technical Overview
+
+What is RAG?
+
+Retrieval-Augmented Generation (RAG) is an AI architecture that combines two complementary capabilities:
+1. A retrieval system that searches a knowledge base for relevant information
+2. A large language model (LLM) that generates answers grounded in the retrieved content
+
+Unlike a standard LLM that relies solely on its training data, a RAG system can answer questions about documents it has never seen before — including private company data, recent publications, and custom knowledge bases.
+
+How Traditional RAG Works
+
+The simplest RAG pipeline follows three steps:
+
+Step 1 — Ingestion
+Documents (PDFs, text files, web pages) are split into small chunks, typically 500–1000 characters each. Each chunk is converted into a vector embedding — a numerical representation of its meaning — using a sentence-transformer model. These embeddings are stored in a vector database such as ChromaDB, FAISS, or Pinecone.
+
+Step 2 — Retrieval
+When a user asks a question, the question is also converted to an embedding. The system then performs a cosine similarity search to find the top-K most semantically similar chunks from the database.
+
+Step 3 — Generation
+The retrieved chunks are passed as context to the LLM alongside the original question. The LLM generates an answer grounded in the provided context.
+
+Limitations of Traditional RAG
+
+Traditional RAG works well for simple queries but breaks down in several common scenarios:
+
+Problem 1 — Irrelevant retrieval: Embedding similarity does not always correlate with relevance. The top-K results may include chunks that are topically related but do not actually answer the question.
+
+Problem 2 — Hallucination: The LLM may generate plausible-sounding answers that go beyond what the retrieved documents support.
+
+Problem 3 — Query mismatch: If the user's question is poorly worded or uses different terminology than the documents, the retrieval step fails to find relevant content.
+
+Problem 4 — Single-strategy retrieval: Pure dense (embedding) search misses keyword matches. A document that uses the exact word from the query may rank lower than one that is semantically similar but less directly relevant.
+
+What is Agentic RAG?
+
+Agentic RAG addresses these limitations by introducing a self-correcting, multi-step loop powered by an orchestration framework such as LangGraph.
+
+Instead of a single retrieve-then-generate pass, the system:
+
+1. Routes the question — decides whether to search local documents or the web
+2. Retrieves using multiple strategies simultaneously (dense + sparse + fusion + reranking)
+3. Grades each document — an LLM scores each retrieved chunk for relevance and discards irrelevant ones
+4. Generates a grounded answer using only the vetted documents
+5. Checks for hallucinations — verifies the answer is supported by the source documents
+6. Checks answer quality — verifies the answer actually addresses the question
+7. Rewrites the query and retries if either check fails
+
+This loop can run up to a configurable maximum number of iterations before the system gracefully returns the best available answer.
+
+Hybrid Search: Dense + Sparse + RRF
+
+A key improvement in modern RAG is combining multiple retrieval strategies:
+
+Dense retrieval uses vector embeddings to find semantically similar documents. It captures meaning even when exact words differ. Model: all-MiniLM-L6-v2.
+
+Sparse retrieval uses BM25 (Best Match 25), a classic information retrieval algorithm based on term frequency and inverse document frequency. It excels at exact keyword matches.
+
+Reciprocal Rank Fusion (RRF) merges the ranked lists from dense and sparse retrieval into a single unified ranking without requiring score normalisation. The formula is: RRF(d) = Σ 1 / (k + rank(d)) where k is typically 60.
+
+Cross-Encoder Reranking applies a more powerful but computationally expensive model to re-score the fused candidates. The cross-encoder reads both the query and document together (unlike bi-encoder embeddings which encode them separately), producing more accurate relevance scores. Model: cross-encoder/ms-marco-MiniLM-L-6-v2.
+
+Conversation Memory
+
+The system maintains a rolling window of conversation history. When the history grows beyond a configurable limit (default: 6 turns), an LLM summarises the oldest messages into a compact summary. This allows the system to remember context from earlier in the session without exceeding the LLM's context window.
+
+Running Locally with Ollama
+
+The entire system — including the LLM — runs on your local machine using Ollama. No API keys, no cloud services, and no data leaves your machine. Recommended models:
+
+- llama3.2 (3B parameters, ~2 GB) — best balance of quality and speed
+- llama3.2:1b (1B parameters, ~800 MB) — faster, suitable for low-resource machines
+- mistral (7B parameters, ~4 GB) — higher quality, requires more RAM
+
+Use Cases
+
+This architecture is well-suited for:
+- Enterprise knowledge base Q&A (HR policies, technical documentation, product manuals)
+- Research assistant for academic papers and reports
+- Customer support automation with accurate, source-grounded responses
+- Code documentation search and explanation
+- Legal and compliance document review
+
+Performance Benchmarks (approximate)
+
+On a MacBook Pro M2 with llama3.2:
+- Average query latency: 8–15 seconds (no loop) / 20–45 seconds (with one self-correction loop)
+- Embedding speed: ~200 chunks per second
+- BM25 index build: <1 second for 1000 chunks
+
+Key References
+
+1. Lewis et al. (2020) — "Retrieval-Augmented Generation for Knowledge-Intensive NLP Tasks" (original RAG paper)
+2. Robertson & Zaragoza (2009) — "The Probabilistic Relevance Framework: BM25 and Beyond"
+3. Cormack et al. (2009) — "Reciprocal Rank Fusion outperforms Condorcet and individual Rank Learning Methods"
+4. LangGraph documentation — https://langchain-ai.github.io/langgraph/
+5. ChromaDB documentation — https://docs.trychroma.com/
+6. Sentence Transformers — https://www.sbert.net/

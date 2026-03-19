@@ -1,5 +1,6 @@
 # Agentic RAG with LangGraph
 
+[![CI](https://github.com/neo-bumblebee-ai/agentic-rag-langgraph/actions/workflows/ci.yml/badge.svg)](https://github.com/neo-bumblebee-ai/agentic-rag-langgraph/actions/workflows/ci.yml)
 [![Python](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
 [![LangGraph](https://img.shields.io/badge/LangGraph-0.2+-orange.svg)](https://langchain-ai.github.io/langgraph/)
 [![LangChain](https://img.shields.io/badge/LangChain-0.3+-green.svg)](https://python.langchain.com)
@@ -146,7 +147,10 @@ cd agentic-rag-langgraph
 ### Step 2 — Install dependencies
 
 ```bash
-# With uv (recommended — faster)
+# With make (recommended)
+make install
+
+# With uv directly
 uv sync
 
 # With pip (alternative)
@@ -182,7 +186,10 @@ data/
 ### Step 5 — Run
 
 ```bash
-# With uv
+# With make (recommended)
+make run
+
+# With uv directly
 uv run python main.py
 
 # With pip / regular Python
@@ -318,6 +325,11 @@ Dependencies aren't installed. Run `uv sync` or `pip install -r requirements.txt
 agentic-rag-langgraph/
 │
 ├── main.py                      # ← START HERE — run this file
+├── Makefile                     # make install / run / test / clean
+│
+├── .github/
+│   └── workflows/
+│       └── ci.yml               # Runs lint + tests on every push
 │
 ├── src/
 │   ├── config.py                # All settings in one place
@@ -335,9 +347,12 @@ agentic-rag-langgraph/
 │   └── ingestion/
 │       └── loader.py            # Reads your PDFs and text files
 │
+├── tests/                       # Test suite (pytest)
+│
 ├── data/
 │   ├── pdf_files/               # ← put your PDFs here
-│   ├── text_files/              # ← put your .txt files here
+│   ├── text_files/
+│   │   └── sample_rag_overview.txt  # ← sample document to query immediately
 │   └── vector_store/            # Auto-generated — do not edit
 │
 ├── .env.example                 # Template for optional API keys
