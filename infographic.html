@@ -1,0 +1,563 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Agentic RAG with LangGraph — Executive Overview</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap');
+
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --dark:    #0d1117;
+    --card:    #161b22;
+    --border:  #30363d;
+    --accent:  #7c3aed;
+    --accent2: #2563eb;
+    --green:   #16a34a;
+    --amber:   #d97706;
+    --red:     #dc2626;
+    --text:    #e6edf3;
+    --muted:   #8b949e;
+    --tag-bg:  #1f2937;
+  }
+
+  body {
+    font-family: 'Inter', sans-serif;
+    background: var(--dark);
+    color: var(--text);
+    min-height: 100vh;
+    padding: 48px 24px;
+  }
+
+  .page { max-width: 1100px; margin: 0 auto; display: flex; flex-direction: column; gap: 32px; }
+
+  /* ── HEADER ─────────────────────────────────────────────────────────────── */
+  .header {
+    background: linear-gradient(135deg, #1a0533 0%, #0d1b3e 50%, #0d1117 100%);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 48px;
+    position: relative;
+    overflow: hidden;
+  }
+  .header::before {
+    content: '';
+    position: absolute; top: -80px; right: -80px;
+    width: 320px; height: 320px;
+    background: radial-gradient(circle, rgba(124,58,237,0.18) 0%, transparent 70%);
+    pointer-events: none;
+  }
+  .badge {
+    display: inline-block;
+    background: rgba(124,58,237,0.15);
+    border: 1px solid rgba(124,58,237,0.4);
+    color: #a78bfa;
+    font-size: 12px; font-weight: 600; letter-spacing: .06em;
+    padding: 4px 12px; border-radius: 20px;
+    margin-bottom: 16px;
+    text-transform: uppercase;
+  }
+  .header h1 {
+    font-size: clamp(28px, 4vw, 44px);
+    font-weight: 900; line-height: 1.1;
+    background: linear-gradient(135deg, #e2d9f3 0%, #a78bfa 50%, #60a5fa 100%);
+    -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+    margin-bottom: 12px;
+  }
+  .header .subtitle {
+    font-size: 17px; color: var(--muted); max-width: 620px; line-height: 1.6;
+  }
+  .header .meta {
+    display: flex; gap: 24px; margin-top: 28px; flex-wrap: wrap;
+  }
+  .meta-item { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--muted); }
+  .meta-dot { width: 8px; height: 8px; border-radius: 50%; }
+
+  /* ── GRID 2-col ──────────────────────────────────────────────────────────── */
+  .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; }
+  .grid-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; }
+  .grid-4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 20px; }
+
+  /* ── CARD ────────────────────────────────────────────────────────────────── */
+  .card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 28px;
+  }
+  .card-title {
+    font-size: 11px; font-weight: 700; letter-spacing: .1em;
+    text-transform: uppercase; color: var(--muted); margin-bottom: 20px;
+  }
+
+  /* ── PROBLEM / SOLUTION ──────────────────────────────────────────────────── */
+  .problem-solution {
+    display: grid; grid-template-columns: 1fr 64px 1fr; gap: 0; align-items: start;
+  }
+  .ps-col h3 { font-size: 14px; font-weight: 700; margin-bottom: 14px; }
+  .ps-col.prob h3 { color: #f87171; }
+  .ps-col.sol  h3 { color: #4ade80; }
+  .ps-arrow {
+    display: flex; align-items: flex-start; justify-content: center;
+    padding-top: 36px; font-size: 22px; color: var(--muted);
+  }
+  .ps-item {
+    display: flex; align-items: flex-start; gap: 10px;
+    padding: 10px 0; border-bottom: 1px solid rgba(48,54,61,0.6);
+    font-size: 13px; line-height: 1.5;
+  }
+  .ps-item:last-child { border-bottom: none; }
+  .ps-icon { font-size: 15px; flex-shrink: 0; margin-top: 1px; }
+
+  /* ── FLOW DIAGRAM ────────────────────────────────────────────────────────── */
+  .flow { display: flex; align-items: flex-start; gap: 0; overflow-x: auto; padding-bottom: 8px; }
+  .flow-step {
+    display: flex; flex-direction: column; align-items: center; gap: 8px;
+    flex: 1; min-width: 100px; position: relative;
+  }
+  .flow-step:not(:last-child)::after {
+    content: '→';
+    position: absolute; right: -12px; top: 22px;
+    color: var(--muted); font-size: 18px; z-index: 2;
+  }
+  .flow-bubble {
+    width: 48px; height: 48px; border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 20px; border: 2px solid;
+    position: relative;
+  }
+  .flow-label { font-size: 11px; font-weight: 600; text-align: center; color: var(--text); }
+  .flow-sub   { font-size: 10px; text-align: center; color: var(--muted); line-height: 1.4; }
+  .blue   { background: rgba(37,99,235,0.15); border-color: rgba(37,99,235,0.5); }
+  .purple { background: rgba(124,58,237,0.15); border-color: rgba(124,58,237,0.5); }
+  .green  { background: rgba(22,163,74,0.15);  border-color: rgba(22,163,74,0.5); }
+  .amber  { background: rgba(217,119,6,0.15);  border-color: rgba(217,119,6,0.5); }
+  .red    { background: rgba(220,38,38,0.15);  border-color: rgba(220,38,38,0.5); }
+  .teal   { background: rgba(20,184,166,0.15); border-color: rgba(20,184,166,0.5); }
+
+  /* ── AGENT CARDS ─────────────────────────────────────────────────────────── */
+  .agent-card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 20px;
+    position: relative;
+    overflow: hidden;
+  }
+  .agent-card::before {
+    content: ''; position: absolute; left: 0; top: 0; bottom: 0;
+    width: 3px; border-radius: 3px 0 0 3px;
+  }
+  .agent-card.c-blue::before   { background: #2563eb; }
+  .agent-card.c-purple::before { background: #7c3aed; }
+  .agent-card.c-green::before  { background: #16a34a; }
+  .agent-card.c-amber::before  { background: #d97706; }
+  .agent-card.c-red::before    { background: #dc2626; }
+  .agent-card.c-teal::before   { background: #14b8a6; }
+  .agent-icon { font-size: 24px; margin-bottom: 10px; }
+  .agent-name { font-size: 13px; font-weight: 700; margin-bottom: 4px; }
+  .agent-role { font-size: 11px; color: var(--muted); line-height: 1.5; }
+
+  /* ── RETRIEVAL PIPELINE ─────────────────────────────────────────────────── */
+  .pipeline {
+    display: flex; align-items: center; gap: 0; overflow-x: auto;
+  }
+  .pipe-stage {
+    flex: 1; text-align: center; padding: 16px 8px;
+    border-right: 1px dashed var(--border); min-width: 110px;
+  }
+  .pipe-stage:last-child { border-right: none; }
+  .pipe-num {
+    width: 28px; height: 28px; border-radius: 50%;
+    background: var(--tag-bg); border: 1px solid var(--border);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 12px; font-weight: 700; color: #a78bfa;
+    margin: 0 auto 10px;
+  }
+  .pipe-name  { font-size: 12px; font-weight: 700; margin-bottom: 4px; }
+  .pipe-desc  { font-size: 11px; color: var(--muted); line-height: 1.4; }
+  .pipe-arrow { font-size: 20px; color: var(--muted); padding: 0 4px; flex-shrink: 0; }
+
+  /* ── STAT CARDS ──────────────────────────────────────────────────────────── */
+  .stat-card {
+    background: var(--card); border: 1px solid var(--border);
+    border-radius: 10px; padding: 24px; text-align: center;
+  }
+  .stat-value {
+    font-size: 36px; font-weight: 900; line-height: 1;
+    background: linear-gradient(135deg, #a78bfa, #60a5fa);
+    -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+    margin-bottom: 6px;
+  }
+  .stat-label { font-size: 12px; color: var(--muted); font-weight: 500; }
+
+  /* ── COMPARISON TABLE ───────────────────────────────────────────────────── */
+  .compare-row {
+    display: grid; grid-template-columns: 1fr 1fr 1fr;
+    border-bottom: 1px solid var(--border); padding: 12px 0;
+    font-size: 13px; align-items: center; gap: 12px;
+  }
+  .compare-row:last-child { border-bottom: none; }
+  .compare-row .aspect { color: var(--muted); font-weight: 500; }
+  .compare-row .bad  { color: #f87171; display: flex; align-items: center; gap: 6px; }
+  .compare-row .good { color: #4ade80; display: flex; align-items: center; gap: 6px; }
+  .compare-header { font-size: 11px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: .08em; }
+
+  /* ── SERIES TIMELINE ────────────────────────────────────────────────────── */
+  .timeline { display: flex; gap: 0; overflow-x: auto; }
+  .tl-item {
+    flex: 1; min-width: 130px; padding: 0 12px;
+    border-right: 1px solid var(--border); text-align: center;
+  }
+  .tl-item:last-child { border-right: none; }
+  .tl-month { font-size: 11px; color: var(--muted); margin-bottom: 6px; font-weight: 600; }
+  .tl-title { font-size: 12px; font-weight: 700; line-height: 1.4; margin-bottom: 8px; }
+  .tl-badge {
+    display: inline-block; font-size: 10px; font-weight: 600;
+    padding: 2px 8px; border-radius: 10px;
+  }
+  .tl-done    { background: rgba(22,163,74,0.15); color: #4ade80; }
+  .tl-active  { background: rgba(124,58,237,0.2); color: #a78bfa; border: 1px solid rgba(124,58,237,0.4); }
+  .tl-future  { background: rgba(48,54,61,0.5); color: var(--muted); }
+
+  /* ── FOOTER ──────────────────────────────────────────────────────────────── */
+  .footer {
+    text-align: center; font-size: 12px; color: var(--muted);
+    padding: 16px; border-top: 1px solid var(--border);
+  }
+  .footer a { color: #a78bfa; text-decoration: none; }
+
+  /* ── SECTION HEADER ─────────────────────────────────────────────────────── */
+  .section-label {
+    font-size: 11px; font-weight: 700; text-transform: uppercase;
+    letter-spacing: .1em; color: var(--muted); margin-bottom: 16px;
+    display: flex; align-items: center; gap: 10px;
+  }
+  .section-label::after {
+    content: ''; flex: 1; height: 1px; background: var(--border);
+  }
+
+  @media (max-width: 700px) {
+    .grid-2, .grid-3, .grid-4 { grid-template-columns: 1fr; }
+    .problem-solution { grid-template-columns: 1fr; }
+    .ps-arrow { display: none; }
+  }
+</style>
+</head>
+<body>
+<div class="page">
+
+  <!-- ── HEADER ─────────────────────────────────────────────────────────── -->
+  <div class="header">
+    <div class="badge">March 2026 · AI Engineering Series · Part 3 of 6</div>
+    <h1>Agentic RAG<br>with LangGraph</h1>
+    <p class="subtitle">
+      A self-correcting, multi-agent AI system that doesn't just retrieve answers —
+      it reasons, evaluates, rewrites, and loops until the answer is trustworthy.
+    </p>
+    <div class="meta">
+      <div class="meta-item"><div class="meta-dot" style="background:#7c3aed"></div>Multi-Agent Orchestration</div>
+      <div class="meta-item"><div class="meta-dot" style="background:#2563eb"></div>Hybrid Search (Dense + BM25)</div>
+      <div class="meta-item"><div class="meta-dot" style="background:#16a34a"></div>Hallucination Detection</div>
+      <div class="meta-item"><div class="meta-dot" style="background:#d97706"></div>Self-Correcting Loops</div>
+      <div class="meta-item"><div class="meta-dot" style="background:#14b8a6"></div>Runs 100% Locally</div>
+    </div>
+  </div>
+
+  <!-- ── ONE-LINE PITCH ──────────────────────────────────────────────────── -->
+  <div class="card" style="text-align:center; padding: 36px 48px;">
+    <div style="font-size:13px; color:var(--muted); margin-bottom:12px; text-transform:uppercase; letter-spacing:.08em; font-weight:600;">The Core Idea</div>
+    <div style="font-size:clamp(18px,2.5vw,26px); font-weight:700; line-height:1.4; max-width:800px; margin:0 auto;">
+      Traditional AI answers questions.<br>
+      <span style="background:linear-gradient(135deg,#a78bfa,#60a5fa); -webkit-background-clip:text; -webkit-text-fill-color:transparent;">
+        This system <em>questions its own answers</em> — and keeps improving until it gets it right.
+      </span>
+    </div>
+  </div>
+
+  <!-- ── STATS ───────────────────────────────────────────────────────────── -->
+  <div class="grid-4">
+    <div class="stat-card">
+      <div class="stat-value">5</div>
+      <div class="stat-label">Specialized AI Agents working together</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-value">3×</div>
+      <div class="stat-label">Retrieval methods fused for higher accuracy</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-value">2</div>
+      <div class="stat-label">Quality gates before answer reaches the user</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-value">0</div>
+      <div class="stat-label">Cloud API keys required — runs fully local</div>
+    </div>
+  </div>
+
+  <!-- ── PROBLEM VS SOLUTION ─────────────────────────────────────────────── -->
+  <div class="card">
+    <div class="card-title">Problem → Solution</div>
+    <div class="problem-solution">
+      <div class="ps-col prob">
+        <h3>❌ Traditional RAG Breaks Down</h3>
+        <div class="ps-item"><span class="ps-icon">📄</span>Retrieves documents regardless of whether they're actually relevant to the question</div>
+        <div class="ps-item"><span class="ps-icon">🎭</span>Confidently generates wrong answers when context is empty or misleading (hallucination)</div>
+        <div class="ps-item"><span class="ps-icon">🔁</span>Retries the exact same failing query — no learning from failure</div>
+        <div class="ps-item"><span class="ps-icon">🔍</span>Only uses cosine similarity — misses keyword-specific matches</div>
+        <div class="ps-item"><span class="ps-icon">🧠</span>Forgets every previous question — no conversational context</div>
+      </div>
+      <div class="ps-arrow">→</div>
+      <div class="ps-col sol">
+        <h3>✅ Agentic RAG Solves It</h3>
+        <div class="ps-item"><span class="ps-icon">🎯</span>Document Grader scores every retrieved chunk — irrelevant ones are filtered out</div>
+        <div class="ps-item"><span class="ps-icon">🛡️</span>Hallucination Checker tests if the answer is actually grounded in facts before delivering it</div>
+        <div class="ps-item"><span class="ps-icon">✏️</span>Query Rewriter intelligently reformulates the question to improve retrieval accuracy</div>
+        <div class="ps-item"><span class="ps-icon">🔀</span>Hybrid Search combines keyword matching + semantic similarity, fused by ranking math</div>
+        <div class="ps-item"><span class="ps-icon">💬</span>Conversation Memory retains context across the session with automatic summarisation</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── HOW IT WORKS FLOW ───────────────────────────────────────────────── -->
+  <div class="card">
+    <div class="card-title">How It Works — The Agent Flow</div>
+    <div class="flow">
+      <div class="flow-step">
+        <div class="flow-bubble blue">❓</div>
+        <div class="flow-label">User Question</div>
+        <div class="flow-sub">Natural language input</div>
+      </div>
+      <div class="flow-step">
+        <div class="flow-bubble purple">🧭</div>
+        <div class="flow-label">Router Agent</div>
+        <div class="flow-sub">Docs or Web?</div>
+      </div>
+      <div class="flow-step">
+        <div class="flow-bubble blue">🔍</div>
+        <div class="flow-label">Retrieve</div>
+        <div class="flow-sub">Hybrid search + rerank</div>
+      </div>
+      <div class="flow-step">
+        <div class="flow-bubble amber">⚖️</div>
+        <div class="flow-label">Grade Docs</div>
+        <div class="flow-sub">Keep only relevant chunks</div>
+      </div>
+      <div class="flow-step">
+        <div class="flow-bubble green">✍️</div>
+        <div class="flow-label">Generate</div>
+        <div class="flow-sub">Context-grounded answer</div>
+      </div>
+      <div class="flow-step">
+        <div class="flow-bubble red">🛡️</div>
+        <div class="flow-label">Quality Gate</div>
+        <div class="flow-sub">Hallucination + usefulness check</div>
+      </div>
+      <div class="flow-step">
+        <div class="flow-bubble teal">✅</div>
+        <div class="flow-label">Deliver</div>
+        <div class="flow-sub">Trusted answer</div>
+      </div>
+    </div>
+    <div style="margin-top:20px; padding:16px; background:rgba(124,58,237,0.08); border-radius:8px; border:1px solid rgba(124,58,237,0.2); font-size:13px; color:var(--muted); line-height:1.6;">
+      <strong style="color:#a78bfa;">Self-correction loop:</strong>
+      If the Quality Gate fails — either because the answer is hallucinated or doesn't resolve the question —
+      the system automatically rewrites the query and retries. This loop runs up to 3 times before returning the best available answer.
+    </div>
+  </div>
+
+  <!-- ── THE 5 AGENTS ─────────────────────────────────────────────────────── -->
+  <div>
+    <div class="section-label">The 5 Specialized Agents</div>
+    <div class="grid-3" style="grid-template-columns: repeat(3,1fr)">
+      <div class="agent-card c-purple">
+        <div class="agent-icon">🧭</div>
+        <div class="agent-name">Router Agent</div>
+        <div class="agent-role">Decides whether to search internal documents or the live web. Routes the query to the right source before wasting retrieval cycles.</div>
+      </div>
+      <div class="agent-card c-blue">
+        <div class="agent-icon">🔍</div>
+        <div class="agent-name">Retrieval Agent</div>
+        <div class="agent-role">Runs three retrieval methods in parallel — dense (semantic), sparse (keyword), and reranking — then combines results mathematically.</div>
+      </div>
+      <div class="agent-card c-amber">
+        <div class="agent-icon">⚖️</div>
+        <div class="agent-name">Document Grader</div>
+        <div class="agent-role">Scores every retrieved chunk individually. Filters out irrelevant content before it can corrupt the generated answer.</div>
+      </div>
+      <div class="agent-card c-red">
+        <div class="agent-icon">🛡️</div>
+        <div class="agent-name">Hallucination Checker</div>
+        <div class="agent-role">Verifies the generated answer is actually supported by the retrieved documents — not invented. Triggers regeneration if it isn't.</div>
+      </div>
+      <div class="agent-card c-green">
+        <div class="agent-icon">✏️</div>
+        <div class="agent-name">Query Rewriter</div>
+        <div class="agent-role">When retrieval fails, rewrites the question to sharpen its semantic intent — improving the next retrieval pass automatically.</div>
+      </div>
+      <div class="agent-card c-teal">
+        <div class="agent-icon">💬</div>
+        <div class="agent-name">Memory Manager</div>
+        <div class="agent-role">Maintains conversation context across turns. Automatically compresses history using the LLM when it grows too long.</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── RETRIEVAL DEEP DIVE ─────────────────────────────────────────────── -->
+  <div class="card">
+    <div class="card-title">The Retrieval Pipeline — Why 3 Methods Beat 1</div>
+    <div class="pipeline">
+      <div class="pipe-stage">
+        <div class="pipe-num">1</div>
+        <div class="pipe-name">Dense Search</div>
+        <div class="pipe-desc">Semantic similarity via AI embeddings (ChromaDB). Great for meaning-based matches.</div>
+      </div>
+      <div class="pipe-arrow">+</div>
+      <div class="pipe-stage">
+        <div class="pipe-num">2</div>
+        <div class="pipe-name">Sparse Search</div>
+        <div class="pipe-desc">BM25 keyword scoring. Great for exact term matches that semantic search misses.</div>
+      </div>
+      <div class="pipe-arrow">→</div>
+      <div class="pipe-stage">
+        <div class="pipe-num">3</div>
+        <div class="pipe-name">RRF Fusion</div>
+        <div class="pipe-desc">Reciprocal Rank Fusion mathematically merges both ranked lists without manual weights.</div>
+      </div>
+      <div class="pipe-arrow">→</div>
+      <div class="pipe-stage">
+        <div class="pipe-num">4</div>
+        <div class="pipe-name">Re-Ranking</div>
+        <div class="pipe-desc">Cross-encoder reads query + doc together. 40-60% better precision than cosine alone.</div>
+      </div>
+      <div class="pipe-arrow">→</div>
+      <div class="pipe-stage">
+        <div class="pipe-num">5</div>
+        <div class="pipe-name">Top-5 Chunks</div>
+        <div class="pipe-desc">Only the highest-confidence, most relevant context reaches the language model.</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── COMPARISON ─────────────────────────────────────────────────────── -->
+  <div class="card">
+    <div class="card-title">Side-by-Side: Traditional RAG vs Agentic RAG</div>
+    <div class="compare-row">
+      <div class="compare-header">Capability</div>
+      <div class="compare-header">Traditional RAG (Feb)</div>
+      <div class="compare-header">Agentic RAG (Mar)</div>
+    </div>
+    <div class="compare-row">
+      <div class="aspect">Retrieval method</div>
+      <div class="bad">✗ Dense cosine only</div>
+      <div class="good">✓ Dense + BM25 + RRF + Reranking</div>
+    </div>
+    <div class="compare-row">
+      <div class="aspect">Irrelevant chunk filtering</div>
+      <div class="bad">✗ All top-K passed to LLM</div>
+      <div class="good">✓ Per-document LLM relevance grading</div>
+    </div>
+    <div class="compare-row">
+      <div class="aspect">Hallucination protection</div>
+      <div class="bad">✗ None — answers blindly</div>
+      <div class="good">✓ Grounding check before delivery</div>
+    </div>
+    <div class="compare-row">
+      <div class="aspect">Failed query handling</div>
+      <div class="bad">✗ Returns empty / wrong answer</div>
+      <div class="good">✓ Rewrites query and retries</div>
+    </div>
+    <div class="compare-row">
+      <div class="aspect">Web fallback</div>
+      <div class="bad">✗ Documents only</div>
+      <div class="good">✓ Routes to live web search if needed</div>
+    </div>
+    <div class="compare-row">
+      <div class="aspect">Conversation context</div>
+      <div class="bad">✗ Stateless — forgets everything</div>
+      <div class="good">✓ Rolling memory with summarisation</div>
+    </div>
+    <div class="compare-row">
+      <div class="aspect">System behaviour</div>
+      <div class="bad">✗ Linear pipeline — one shot</div>
+      <div class="good">✓ Stateful graph — loops until correct</div>
+    </div>
+  </div>
+
+  <!-- ── TECH STACK ─────────────────────────────────────────────────────── -->
+  <div>
+    <div class="section-label">Technology Stack</div>
+    <div class="grid-4">
+      <div class="card" style="padding:20px; text-align:center;">
+        <div style="font-size:28px; margin-bottom:10px;">🕸️</div>
+        <div style="font-weight:700; font-size:13px; margin-bottom:4px;">LangGraph</div>
+        <div style="font-size:11px; color:var(--muted);">Stateful, cyclical agent graph orchestration</div>
+      </div>
+      <div class="card" style="padding:20px; text-align:center;">
+        <div style="font-size:28px; margin-bottom:10px;">🦙</div>
+        <div style="font-weight:700; font-size:13px; margin-bottom:4px;">Ollama + LLaMA 3.2</div>
+        <div style="font-size:11px; color:var(--muted);">Local LLM — no cloud, no cost, no data leakage</div>
+      </div>
+      <div class="card" style="padding:20px; text-align:center;">
+        <div style="font-size:28px; margin-bottom:10px;">🗄️</div>
+        <div style="font-weight:700; font-size:13px; margin-bottom:4px;">ChromaDB</div>
+        <div style="font-size:11px; color:var(--muted);">Persistent vector store for semantic search</div>
+      </div>
+      <div class="card" style="padding:20px; text-align:center;">
+        <div style="font-size:28px; margin-bottom:10px;">🔢</div>
+        <div style="font-weight:700; font-size:13px; margin-bottom:4px;">BM25 + CrossEncoder</div>
+        <div style="font-size:11px; color:var(--muted);">Sparse retrieval + joint query-doc reranking</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── SERIES TIMELINE ─────────────────────────────────────────────────── -->
+  <div class="card">
+    <div class="card-title">6-Month Build-in-Public Series</div>
+    <div class="timeline">
+      <div class="tl-item">
+        <div class="tl-month">January</div>
+        <div class="tl-title">Databricks AI Engineering Challenge</div>
+        <div><span class="tl-badge tl-done">✓ Done</span></div>
+      </div>
+      <div class="tl-item">
+        <div class="tl-month">February</div>
+        <div class="tl-title">Traditional RAG Pipeline</div>
+        <div><span class="tl-badge tl-done">✓ Done</span></div>
+      </div>
+      <div class="tl-item" style="background:rgba(124,58,237,0.05); border-radius:8px;">
+        <div class="tl-month" style="color:#a78bfa;">March</div>
+        <div class="tl-title" style="color:#e2d9f3;">Agentic RAG with LangGraph</div>
+        <div><span class="tl-badge tl-active">🔨 This Repo</span></div>
+      </div>
+      <div class="tl-item">
+        <div class="tl-month">April</div>
+        <div class="tl-title">LLMOps Evaluation Platform</div>
+        <div><span class="tl-badge tl-future">Coming Soon</span></div>
+      </div>
+      <div class="tl-item">
+        <div class="tl-month">May</div>
+        <div class="tl-title">LLM Fine-Tuning + NVIDIA NIM</div>
+        <div><span class="tl-badge tl-future">Coming Soon</span></div>
+      </div>
+      <div class="tl-item">
+        <div class="tl-month">June</div>
+        <div class="tl-title">Enterprise AI Platform (Capstone)</div>
+        <div><span class="tl-badge tl-future">Coming Soon</span></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── FOOTER ─────────────────────────────────────────────────────────── -->
+  <div class="footer">
+    <strong style="color:var(--text);">neo-bumblebee-ai</strong> &nbsp;·&nbsp;
+    <a href="https://github.com/neo-bumblebee-ai/agentic-rag-langgraph" target="_blank">
+      github.com/neo-bumblebee-ai/agentic-rag-langgraph
+    </a>
+  </div>
+
+</div>
+</body>
+</html>

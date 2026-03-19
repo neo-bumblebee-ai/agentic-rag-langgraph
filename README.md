@@ -412,7 +412,6 @@ This is **Part 3** of a 6-month build-in-public AI engineering series:
 ## Author
 
 **Jignesh Patel** — [@neo-bumblebee-ai](https://github.com/neo-bumblebee-ai)
-Senior Data Architect & Engineering Lead · 17+ years building large-scale data platforms.
 
 See [CONTRIBUTORS.md](CONTRIBUTORS.md) for the full contributor list.
 
