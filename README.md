@@ -10,7 +10,7 @@
 
 > **Part 3 of a hands-on AI engineering series** — building in public, month by month.
 >
-> ← [Part 2 — Traditional RAG Pipeline](https://github.com/neo-bumblebee-ai/traditional-rag-pipeline) &nbsp;|&nbsp; [Part 4 — LLMOps Evaluation Platform →](https://github.com/neo-bumblebee-ai) *(coming April 2026)*
+> ← [Part 2 — Traditional RAG Pipeline](https://github.com/neo-bumblebee-ai/traditional-rag-pipeline) &nbsp;|&nbsp; [Part 4 — Vectorless RAG →](https://github.com/neo-bumblebee-ai/vectorless-rag)
 
 ---
 
